@@ -302,9 +302,24 @@ class Graph:
         """
 
         priors = self._ancestor_list(node)
-        
-        pass
+        self._exchange_vars(priors, feed_dict)
 
+        for n in priors:
+            n._compute()
+        node._compute()
+        return node.value
+        # if compute_derivatives:
+        #     for current in nodes:
+        #         current._derivative = 0.0
+        #     node._derivative = 1.0
+        #     for current in reversed(nodes):
+        #         current.backward()
+        # pass
+
+    def _exchange_vars(self, priors, feed_dict):
+        for n in priors:
+            if isinstance(n, Placeholder):
+                n._value = feed_dict[n.name]
 
 # Construct a default computation graph.
 _GRAPH = Graph()
@@ -351,18 +366,21 @@ class Node:
                                   self.__class__._COUNT)
             self.__class__._COUNT += 1
 
+        self._value = None
+        self._derivative = None
         self.name = name
+
         _GRAPH._add_node(self)
 
     @property
     def value(self):
         """ Value should be read-only (except for variable nodes). """
-        return _GRAPH.run(self)
+        return self._value
 
     @property
     def derivative(self):
         """ derivative should be read-only. """
-        return _GRAPH.run(self, compute_derivatives=True)
+        return self._derivative
 
     def __repr__(self):
         """ Default string representation is the Node's name. """
@@ -387,6 +405,9 @@ class BinaryOp(Node):
         _GRAPH._add_edge(operand1, self)
         _GRAPH._add_edge(operand2, self)
 
+    def _compute(self):
+        self._compute()
+
 
 class UnaryOp(Node):
     """ Abstract base class for all nodes representing unary operators"""
@@ -403,6 +424,9 @@ class UnaryOp(Node):
         self.operand = operand
         _GRAPH._add_edge(operand, self)
 
+    def _compute(self):
+        self._compute()
+
 
 # INPUT NODES ------------------------
 
@@ -418,14 +442,16 @@ class Variable(Node):
             name: Variable name
         """
         super().__init__(name)
-        self.value = value
+        self._value = value
 
     def assign(self, value):
         """ Assign a new value to this variable
 
         """
-        self.value = value
+        self._value = value
 
+    def _compute(self):
+        self._value = self._value
 
 class Constant(Node):
     """ Constants behave like Variables that cannot be assigned values
@@ -435,6 +461,9 @@ class Constant(Node):
     def __init__(self, value, name=""):
         super().__init__(name)
         self._value = value
+
+    def _compute(self):
+        self._value = self._value
 
     def __repr__(self):
         return self.name + ": " + str(self._value)
@@ -449,6 +478,9 @@ class Placeholder(Node):
     def __init__(self, name=""):
         super().__init__(name)
 
+    def _compute(self):
+        pass
+
 
 # BINARY OPERATORS ---------------------
 
@@ -459,6 +491,9 @@ class Add(BinaryOp):
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
 
+    def _compute(self):
+        self._value = (self.operand1.value + self.operand2.value)
+
 
 class Subtract(BinaryOp):
     """ Subtraction.  Node representing operand1 - operand2. """
@@ -466,6 +501,9 @@ class Subtract(BinaryOp):
 
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
+
+    def _compute(self):
+        self._value = (self.operand1.value - self.operand2.value)
 
 
 class Multiply(BinaryOp):
@@ -475,6 +513,9 @@ class Multiply(BinaryOp):
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
 
+    def _compute(self):
+        self._value = (self.operand1.value * self.operand2.value)
+
 
 class Divide(BinaryOp):
     """ Division.  Node representing operand1 / operand2.  """
@@ -482,6 +523,9 @@ class Divide(BinaryOp):
 
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
+
+    def _compute(self):
+        self._value = (self.operand1.value / self.operand2.value)
 
 
 # UNARY OPERATORS --------------------
@@ -500,6 +544,10 @@ class Pow(UnaryOp):
         """
 
         super().__init__(operand, name)
+        self._power = power
+
+    def _compute(self):
+        self._value = math.pow(self.operand.value, self._power)
 
 
 class Exp(UnaryOp):
@@ -510,6 +558,9 @@ class Exp(UnaryOp):
     def __init__(self, operand, name=""):
         super().__init__(operand, name)
 
+    def _compute(self):
+        self._value = math.exp(self.operand.value)
+
 
 class Log(UnaryOp):
     """ Log base e. """
@@ -517,6 +568,9 @@ class Log(UnaryOp):
 
     def __init__(self, operand, name=""):
         super().__init__(operand, name)
+
+    def _compute(self):
+        self._value = math.log(self.operand.value)
 
 
 class Abs(UnaryOp):
@@ -526,9 +580,18 @@ class Abs(UnaryOp):
     def __init__(self, operand, name=""):
         super().__init__(operand, name)
 
+    def _compute(self):
+        self._value = abs(self.operand.value)
+
 
 def main():
-    pass
+    with Graph() as g:
+        x = Constant(4.0)
+        y = Placeholder(name='y')
+        sum = Add(x, y)
+
+        print(g.run(sum, feed_dict={'y': 5.0}))  # Prints 9.0
+        print(g.run(sum, feed_dict={'y': 10.0}))  # Prints 14.0
 
 
 if __name__ == "__main__":
