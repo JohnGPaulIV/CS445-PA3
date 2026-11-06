@@ -303,7 +303,7 @@ class Graph:
 
         
         if compute_derivatives:
-            for current in nodes:
+            for current in node:
                 current._derivative = 0.0
             node._derivative = 1.0
             for current in reversed(nodes):
