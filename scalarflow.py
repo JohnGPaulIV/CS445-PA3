@@ -301,7 +301,8 @@ class Graph:
 
         """
 
-        # UNFINISHED!!
+        priors = self._ancestor_list(node)
+        
         pass
 
 
@@ -361,7 +362,6 @@ class Node:
     @property
     def derivative(self):
         """ derivative should be read-only. """
-        # UNFINISHED!!
         return _GRAPH.run(self, compute_derivatives=True)
 
     def __repr__(self):
