@@ -92,8 +92,8 @@ Placeholders must be assigned a value when ``run`` is called on the graph::
         print(g.run(sum, feed_dict={'y': 5.0})) # Prints 9.0
         print(g.run(sum, feed_dict={'y': 10.0})) # Prints 14.0
 
-Here, ``feed_dict`` is a dictionary that maps from placeholder node names to the
-value that should be used in the requested computation.  Placeholder nodes
+Here, ``feed_dict`` is a dictionary that maps from placeholder node names to
+the value that should be used in the requested computation.  Placeholder nodes
 are useful for representing inputs and outputs in machine learning training
 algorithms.
 
@@ -115,7 +115,8 @@ those nodes are cached and are available through the ``value`` attribute::
         g.run(sum_sqrd)
 
         print(sum.value) # prints 10.0, sum was computed!
-        print(sum_to_fourth.value) # Something terrible happens, never computed.
+        print(sum_to_fourth.value) # Something terrible happens, never
+        computed.
 
 ============================================
 Node derivatives
@@ -301,7 +302,6 @@ class Graph:
 
         """
 
-
         priors = self._ancestor_list(node) + [node]
         self._exchange_vars(priors, feed_dict)
 
@@ -322,6 +322,7 @@ class Graph:
         for n in priors:
             if isinstance(n, Placeholder):
                 n._value = feed_dict[n.name]
+
 
 # Construct a default computation graph.
 _GRAPH = Graph()
@@ -424,8 +425,8 @@ class UnaryOp(Node):
     """ Abstract base class for all nodes representing unary operators"""
 
     def __init__(self, operand, name):
-        """ UnaryOp constructor handles updating the graph structure and storing
-        the operand.
+        """ UnaryOp constructor handles updating the graph structure and
+        storing the operand.
 
         Args:
             operand: Node representing the operand for this node
@@ -466,6 +467,7 @@ class Variable(Node):
 
     def _compute(self):
         self._value = self._value
+
 
 class Constant(Node):
     """ Constants behave like Variables that cannot be assigned values
@@ -539,8 +541,10 @@ class Multiply(BinaryOp):
         self._value = (self.operand1.value * self.operand2.value)
 
     def _backwards(self):
-        self.operand1._derivative += self._derivative * self.operand2._derivative
-        self.operand2._derivative += self._derivative * self.operand1._derivative
+        self.operand1._derivative += (self._derivative *
+                                      self.operand2._derivative)
+        self.operand2._derivative += (self._derivative *
+                                      self.operand1._derivative)
 
 
 class Divide(BinaryOp):
@@ -555,7 +559,9 @@ class Divide(BinaryOp):
 
     def _backwards(self):
         self.operand1._derivative += self._derivative / self.operand2.value
-        self.operand2._derivative -= self._derivative * self.operand1.value / (self.operand2.value * self.operand2.value)
+        self.operand2._derivative -= (self._derivative * self.operand1.value /
+                                      (self.operand2.value *
+                                       self.operand2.value))
 
 
 # UNARY OPERATORS --------------------
@@ -580,7 +586,8 @@ class Pow(UnaryOp):
         self._value = math.pow(self.operand.value, self._power)
 
     def _backwards(self):
-        self.operand._derivative += self._derivative * self._power * self.operand.value ** (self._power - 1)
+        self.operand._derivative += (self._derivative * self._power *
+                                     self.operand.value ** (self._power - 1))
 
 
 class Exp(UnaryOp):
@@ -643,9 +650,9 @@ def main():
     with Graph() as g:
         x = Constant(4.0)
         y = Pow(x, 2.0)  # y = x^2
-    
-        print(g.run(y, compute_derivatives=True)) # prints 16.0
-        print(x.derivative) # prints dy/dx = 2x = 8.0
+
+        print(g.run(y, compute_derivatives=True))  # prints 16.0
+        print(x.derivative)  # prints dy/dx = 2x = 8.0
 
 
 if __name__ == "__main__":
