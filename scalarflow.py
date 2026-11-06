@@ -446,6 +446,20 @@ class UnaryOp(Node):
         )
 
 
+class ReLU(UnaryOp):
+    """Rectified linear unit: max(0, operand)."""
+    
+    _COUNT = 0
+
+    def __init__(self, operand, name=""):
+        super().__init__(operand, name)
+
+    def _forward_value(self, value):
+        return max(0.0, value)
+
+    def _local_gradient(self, value):
+        return 1.0 if value > 0 else 0.0
+
 # INPUT NODES ------------------------
 
 class ValueNode(Node):

@@ -155,7 +155,7 @@ class LogisticRegression(AbstractSFClassifier):
 class MLP(AbstractSFClassifier):
     """ Simple multi-layer neural network classifier."""
 
-    def __init__(self, input_dim, hidden_sizes, activation='sigmoid'):
+    def __init__(self, input_dim, hidden_sizes, activation='sigmoid, ReLU'):
         """
 
         Args:
