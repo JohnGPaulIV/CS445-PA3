@@ -301,6 +301,7 @@ class Graph:
 
         """
 
+
         priors = self._ancestor_list(node)
         self._exchange_vars(priors, feed_dict)
 
