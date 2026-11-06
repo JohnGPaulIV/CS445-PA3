@@ -356,14 +356,13 @@ class Node:
     @property
     def value(self):
         """ Value should be read-only (except for variable nodes). """
-        # UNFINISHED!!
-        return None
+        return _GRAPH.run(self)
 
     @property
     def derivative(self):
         """ derivative should be read-only. """
         # UNFINISHED!!
-        return None
+        return _GRAPH.run(self, compute_derivatives=True)
 
     def __repr__(self):
         """ Default string representation is the Node's name. """
@@ -419,13 +418,13 @@ class Variable(Node):
             name: Variable name
         """
         super().__init__(name)
+        self.value = value
 
     def assign(self, value):
         """ Assign a new value to this variable
 
         """
-        # UNFINISHED!
-        pass
+        self.value = value
 
 
 class Constant(Node):
