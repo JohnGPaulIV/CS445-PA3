@@ -302,20 +302,21 @@ class Graph:
         """
 
 
-        priors = self._ancestor_list(node)
+        priors = self._ancestor_list(node) + [node]
         self._exchange_vars(priors, feed_dict)
 
         for n in priors:
             n._compute()
-        node._compute()
+
+        if compute_derivatives:
+            backwards = reversed(priors)
+            for n in priors:
+                n._derivative = 0
+            node._derivative = 1
+            for n in backwards:
+                n._backwards()
+
         return node.value
-        # if compute_derivatives:
-        #     for current in nodes:
-        #         current._derivative = 0.0
-        #     node._derivative = 1.0
-        #     for current in reversed(nodes):
-        #         current.backward()
-        # pass
 
     def _exchange_vars(self, priors, feed_dict):
         for n in priors:
@@ -383,6 +384,12 @@ class Node:
         """ derivative should be read-only. """
         return self._derivative
 
+    def _compute(self):
+        pass
+
+    def _backwards(self):
+        pass
+
     def __repr__(self):
         """ Default string representation is the Node's name. """
         return self.name
@@ -409,6 +416,9 @@ class BinaryOp(Node):
     def _compute(self):
         self._compute()
 
+    def _backwards(self):
+        pass
+
 
 class UnaryOp(Node):
     """ Abstract base class for all nodes representing unary operators"""
@@ -427,6 +437,9 @@ class UnaryOp(Node):
 
     def _compute(self):
         self._compute()
+
+    def _backwards(self):
+        pass
 
 
 # INPUT NODES ------------------------
@@ -495,6 +508,10 @@ class Add(BinaryOp):
     def _compute(self):
         self._value = (self.operand1.value + self.operand2.value)
 
+    def _backwards(self):
+        self.operand1._derivative += self._derivative
+        self.operand2._derivative += self._derivative
+
 
 class Subtract(BinaryOp):
     """ Subtraction.  Node representing operand1 - operand2. """
@@ -505,6 +522,10 @@ class Subtract(BinaryOp):
 
     def _compute(self):
         self._value = (self.operand1.value - self.operand2.value)
+
+    def _backwards(self):
+        self.operand1._derivative += self._derivative
+        self.operand2._derivative -= self._derivative
 
 
 class Multiply(BinaryOp):
@@ -517,6 +538,10 @@ class Multiply(BinaryOp):
     def _compute(self):
         self._value = (self.operand1.value * self.operand2.value)
 
+    def _backwards(self):
+        self.operand1._derivative += self._derivative * self.operand2._derivative
+        self.operand2._derivative += self._derivative * self.operand1._derivative
+
 
 class Divide(BinaryOp):
     """ Division.  Node representing operand1 / operand2.  """
@@ -527,6 +552,10 @@ class Divide(BinaryOp):
 
     def _compute(self):
         self._value = (self.operand1.value / self.operand2.value)
+
+    def _backwards(self):
+        self.operand1._derivative += self._derivative / self.operand2.value
+        self.operand2._derivative -= self._derivative * self.operand1.value / (self.operand2.value * self.operand2.value)
 
 
 # UNARY OPERATORS --------------------
@@ -550,6 +579,9 @@ class Pow(UnaryOp):
     def _compute(self):
         self._value = math.pow(self.operand.value, self._power)
 
+    def _backwards(self):
+        self.operand._derivative += self._derivative * self._power * self.operand.value ** (self._power - 1)
+
 
 class Exp(UnaryOp):
     """ Exponential node:  e^operand
@@ -562,6 +594,9 @@ class Exp(UnaryOp):
     def _compute(self):
         self._value = math.exp(self.operand.value)
 
+    def _backwards(self):
+        self.operand._derivative += self._derivative * self.value
+
 
 class Log(UnaryOp):
     """ Log base e. """
@@ -572,6 +607,9 @@ class Log(UnaryOp):
 
     def _compute(self):
         self._value = math.log(self.operand.value)
+
+    def _backwards(self):
+        self.operand._derivative += self._derivative / self.operand.value
 
 
 class Abs(UnaryOp):
@@ -584,6 +622,14 @@ class Abs(UnaryOp):
     def _compute(self):
         self._value = abs(self.operand.value)
 
+    def _backwards(self):
+        x = self.operand.value
+
+        if x > 0:
+            self.operand._derivative += self._derivative
+        elif x < 0:
+            self.operand._derivative -= self._derivative
+
 
 def main():
     with Graph() as g:
@@ -593,6 +639,13 @@ def main():
 
         print(g.run(sum, feed_dict={'y': 5.0}))  # Prints 9.0
         print(g.run(sum, feed_dict={'y': 10.0}))  # Prints 14.0
+
+    with Graph() as g:
+        x = Constant(4.0)
+        y = Pow(x, 2.0)  # y = x^2
+    
+        print(g.run(y, compute_derivatives=True)) # prints 16.0
+        print(x.derivative) # prints dy/dx = 2x = 8.0
 
 
 if __name__ == "__main__":
