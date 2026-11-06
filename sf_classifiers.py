@@ -155,7 +155,7 @@ class LogisticRegression(AbstractSFClassifier):
 class MLP(AbstractSFClassifier):
     """ Simple multi-layer neural network classifier."""
 
-    def __init__(self, input_dim, hidden_sizes, activation='sigmoid, ReLU'):
+    def __init__(self, input_dim, hidden_sizes, activation='sigmoid'):
         """
 
         Args:
@@ -167,6 +167,8 @@ class MLP(AbstractSFClassifier):
             activation (string): 'sigmoid' or 'relu'
         """
         super().__init__()
+        if activation not in ('sigmoid', 'relu'):
+            raise ValueError("Unrecognized activation " + activation)
 
         with self.graph:
             # Create the input nodes
@@ -188,9 +190,7 @@ class MLP(AbstractSFClassifier):
                         if activation == 'sigmoid':
                             init_w = sf_util.glorot_init(prev_size, hidden_size)
                         else:
-                            # use sf_util.he_init
-                            raise ValueError("Unrecognized activation " +
-                                             activation)
+                            init_w = sf_util.he_init(prev_size)
 
                         cur_w_name = 'w_{}_{}_{}'.format(layer + 1, i, j)
                         cur_w = sf.Variable(init_w, name=cur_w_name)
@@ -200,8 +200,7 @@ class MLP(AbstractSFClassifier):
                     if activation == 'sigmoid':
                         cur_layer.append(sf_util.logistic(total))
                     else:
-                        raise ValueError("Unrecognized activation " +
-                                         activation)
+                        cur_layer.append(sf.ReLU(total))
 
                 prev_layer = cur_layer
 
