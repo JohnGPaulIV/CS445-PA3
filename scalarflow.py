@@ -302,24 +302,26 @@ class Graph:
 
         """
 
-        if feed_dict is None:
-            feed_dict = {}
-        if node not in self._graph:
-            raise ValueError("Requested node is not part of this graph")
+        priors = self._ancestor_list(node) + [node]
+        self._exchange_vars(priors, feed_dict)
 
-        nodes = self._ancestor_list(node) + [node]
-        for current in nodes:
-            current._derivative = None
-            current.forward(feed_dict)
+        for n in priors:
+            n._compute()
 
         if compute_derivatives:
-            for current in nodes:
-                current._derivative = 0.0
-            node._derivative = 1.0
-            for current in reversed(nodes):
-                current.backward()
+            backwards = reversed(priors)
+            for n in priors:
+                n._derivative = 0
+            node._derivative = 1
+            for n in backwards:
+                n._backwards()
 
         return node.value
+
+    def _exchange_vars(self, priors, feed_dict):
+        for n in priors:
+            if isinstance(n, Placeholder):
+                n._value = feed_dict[n.name]
 
 
 # Construct a default computation graph.
@@ -370,26 +372,24 @@ class Node:
         self._value = None
         self._derivative = None
         self.name = name
-        self._value = None
-        self._derivative = None
+
         _GRAPH._add_node(self)
-
-    def forward(self, feed_dict):
-        raise NotImplementedError
-
-    def backward(self):
-        return None
 
     @property
     def value(self):
         """ Value should be read-only (except for variable nodes). """
-        return self._value
         return self._value
 
     @property
     def derivative(self):
         """ derivative should be read-only. """
         return self._derivative
+
+    def _compute(self):
+        pass
+
+    def _backwards(self):
+        pass
 
     def __repr__(self):
         """ Default string representation is the Node's name. """
@@ -414,16 +414,11 @@ class BinaryOp(Node):
         _GRAPH._add_edge(operand1, self)
         _GRAPH._add_edge(operand2, self)
 
-    def forward(self, feed_dict):
-        self._value = self._forward_value(self.operand1.value,
-                                          self.operand2.value)
+    def _compute(self):
+        self._compute()
 
-    def backward(self):
-        left_grad, right_grad = self._local_gradients(
-            self.operand1.value, self.operand2.value
-        )
-        self.operand1._derivative += self.derivative * left_grad
-        self.operand2._derivative += self.derivative * right_grad
+    def _backwards(self):
+        pass
 
 
 class UnaryOp(Node):
@@ -441,43 +436,16 @@ class UnaryOp(Node):
         self.operand = operand
         _GRAPH._add_edge(operand, self)
 
-    def forward(self, feed_dict):
-        self._value = self._forward_value(self.operand.value)
+    def _compute(self):
+        self._compute()
 
-    def backward(self):
-        self.operand._derivative += (
-            self.derivative * self._local_gradient(self.operand.value)
-        )
+    def _backwards(self):
+        pass
 
-
-class ReLU(UnaryOp):
-    """Rectified linear unit: max(0, operand)."""
-    
-    _COUNT = 0
-
-    def __init__(self, operand, name=""):
-        super().__init__(operand, name)
-
-    def _forward_value(self, value):
-        return max(0.0, value)
-
-    def _local_gradient(self, value):
-        return 1.0 if value > 0 else 0.0
 
 # INPUT NODES ------------------------
 
-class ValueNode(Node):
-    """Base class for nodes whose value is set directly."""
-
-    def __init__(self, value, name):
-        super().__init__(name)
-        self._value = value
-
-    def forward(self, feed_dict):
-        return None
-
-
-class Variable(ValueNode):
+class Variable(Node):
     """ Variable.  A node that can be assigned a value. """
     _COUNT = 0
 
@@ -488,7 +456,8 @@ class Variable(ValueNode):
             value: Initial value of this variable
             name: Variable name
         """
-        super().__init__(value, name)
+        super().__init__(name)
+        self._value = value
 
     def assign(self, value):
         """ Assign a new value to this variable
@@ -496,14 +465,21 @@ class Variable(ValueNode):
         """
         self._value = value
 
+    def _compute(self):
+        self._value = self._value
 
-class Constant(ValueNode):
+
+class Constant(Node):
     """ Constants behave like Variables that cannot be assigned values
     after they are created. """
     _COUNT = 0
 
     def __init__(self, value, name=""):
-        super().__init__(value, name)
+        super().__init__(name)
+        self._value = value
+
+    def _compute(self):
+        self._value = self._value
 
     def __repr__(self):
         return self.name + ": " + str(self._value)
@@ -518,12 +494,8 @@ class Placeholder(Node):
     def __init__(self, name=""):
         super().__init__(name)
 
-    def forward(self, feed_dict):
-        if self.name not in feed_dict:
-            raise ValueError(
-                "No value provided for placeholder '{}'".format(self.name)
-            )
-        self._value = feed_dict[self.name]
+    def _compute(self):
+        pass
 
 
 # BINARY OPERATORS ---------------------
@@ -535,11 +507,12 @@ class Add(BinaryOp):
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
 
-    def _forward_value(self, left, right):
-        return left + right
+    def _compute(self):
+        self._value = (self.operand1.value + self.operand2.value)
 
-    def _local_gradients(self, left, right):
-        return 1.0, 1.0
+    def _backwards(self):
+        self.operand1._derivative += self._derivative
+        self.operand2._derivative += self._derivative
 
 
 class Subtract(BinaryOp):
@@ -549,11 +522,12 @@ class Subtract(BinaryOp):
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
 
-    def _forward_value(self, left, right):
-        return left - right
+    def _compute(self):
+        self._value = (self.operand1.value - self.operand2.value)
 
-    def _local_gradients(self, left, right):
-        return 1.0, -1.0
+    def _backwards(self):
+        self.operand1._derivative += self._derivative
+        self.operand2._derivative -= self._derivative
 
 
 class Multiply(BinaryOp):
@@ -563,11 +537,14 @@ class Multiply(BinaryOp):
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
 
-    def _forward_value(self, left, right):
-        return left * right
+    def _compute(self):
+        self._value = (self.operand1.value * self.operand2.value)
 
-    def _local_gradients(self, left, right):
-        return right, left
+    def _backwards(self):
+        self.operand1._derivative += (self._derivative *
+                                      self.operand2._derivative)
+        self.operand2._derivative += (self._derivative *
+                                      self.operand1._derivative)
 
 
 class Divide(BinaryOp):
@@ -577,11 +554,14 @@ class Divide(BinaryOp):
     def __init__(self, operand1, operand2, name=""):
         super().__init__(operand1, operand2, name)
 
-    def _forward_value(self, left, right):
-        return left / right
+    def _compute(self):
+        self._value = (self.operand1.value / self.operand2.value)
 
-    def _local_gradients(self, left, right):
-        return 1.0 / right, -left / (right ** 2)
+    def _backwards(self):
+        self.operand1._derivative += self._derivative / self.operand2.value
+        self.operand2._derivative -= (self._derivative * self.operand1.value /
+                                      (self.operand2.value *
+                                       self.operand2.value))
 
 
 # UNARY OPERATORS --------------------
@@ -600,13 +580,14 @@ class Pow(UnaryOp):
         """
 
         super().__init__(operand, name)
-        self.power = power
+        self._power = power
 
-    def _forward_value(self, value):
-        return value ** self.power
+    def _compute(self):
+        self._value = math.pow(self.operand.value, self._power)
 
-    def _local_gradient(self, value):
-        return self.power * value ** (self.power - 1)
+    def _backwards(self):
+        self.operand._derivative += (self._derivative * self._power *
+                                     self.operand.value ** (self._power - 1))
 
 
 class Exp(UnaryOp):
@@ -617,11 +598,11 @@ class Exp(UnaryOp):
     def __init__(self, operand, name=""):
         super().__init__(operand, name)
 
-    def _forward_value(self, value):
-        return math.exp(value)
+    def _compute(self):
+        self._value = math.exp(self.operand.value)
 
-    def _local_gradient(self, value):
-        return self.value
+    def _backwards(self):
+        self.operand._derivative += self._derivative * self.value
 
 
 class Log(UnaryOp):
@@ -631,11 +612,11 @@ class Log(UnaryOp):
     def __init__(self, operand, name=""):
         super().__init__(operand, name)
 
-    def _forward_value(self, value):
-        return math.log(value)
+    def _compute(self):
+        self._value = math.log(self.operand.value)
 
-    def _local_gradient(self, value):
-        return 1.0 / value
+    def _backwards(self):
+        self.operand._derivative += self._derivative / self.operand.value
 
 
 class Abs(UnaryOp):
@@ -645,15 +626,16 @@ class Abs(UnaryOp):
     def __init__(self, operand, name=""):
         super().__init__(operand, name)
 
-    def _forward_value(self, value):
-        return abs(value)
+    def _compute(self):
+        self._value = abs(self.operand.value)
 
-    def _local_gradient(self, value):
-        if value > 0:
-            return 1.0
-        if value < 0:
-            return -1.0
-        return 0.0
+    def _backwards(self):
+        x = self.operand.value
+
+        if x > 0:
+            self.operand._derivative += self._derivative
+        elif x < 0:
+            self.operand._derivative -= self._derivative
 
 
 def main():
