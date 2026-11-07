@@ -53,6 +53,14 @@ class AbstractSFClassifier(abc.ABC):
 
         """
         feed_dicts = sf_util.xy_to_feed_dicts(x, y)
+        loss_history = []
+        first_layer_weights = [
+            p for p in self.parameters
+            if p.name.startswith("w_1_")
+        ]
+
+        gradient_sum = 0.0
+        gradient_count = 0
         for epoch in range(epochs):
             random.shuffle(feed_dicts)
 
@@ -61,13 +69,23 @@ class AbstractSFClassifier(abc.ABC):
                 loss = self.graph.run(self.loss_node, feed_dict=feed_dict,
                                       compute_derivatives=True)
                 losses.append(loss)
+                if epoch == 0:
+                    for weight in first_layer_weights:
+                        gradient_sum += abs(float(weight.derivative))
+                        gradient_count += 1
 
                 for param in self.parameters:
                     param.assign(param.value - learning_rate * param.derivative)
 
             total_loss = sum(losses)
+            loss_history.append(total_loss)
 
             print("Epoch {} loss: {}".format(epoch, total_loss))
+        self.first_layer_gradient_mean = (
+        gradient_sum / gradient_count
+        if gradient_count > 0 else None
+    )
+        return loss_history
 
     def score(self, x, y):
         """ Return the accuracy of this model on the provided dataset and

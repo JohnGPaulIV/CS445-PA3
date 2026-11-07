@@ -442,6 +442,18 @@ class UnaryOp(Node):
     def _backwards(self):
         pass
 
+class ReLU(UnaryOp):
+    _COUNT = 0
+
+    def __init__(self, operand, name=""):
+        super().__init__(operand, name)
+
+    def _compute(self):
+        self._value = max(0.0, self.operand.value)
+
+    def _backwards(self):
+        if self.operand.value > 0:
+            self.operand._derivative += self._derivative
 
 # INPUT NODES ------------------------
 
@@ -541,10 +553,12 @@ class Multiply(BinaryOp):
         self._value = (self.operand1.value * self.operand2.value)
 
     def _backwards(self):
-        self.operand1._derivative += (self._derivative *
-                                      self.operand2._derivative)
-        self.operand2._derivative += (self._derivative *
-                                      self.operand1._derivative)
+        self.operand1._derivative += (
+            self._derivative * self.operand2.value
+        )
+        self.operand2._derivative += (
+            self._derivative * self.operand1.value
+        )
 
 
 class Divide(BinaryOp):
