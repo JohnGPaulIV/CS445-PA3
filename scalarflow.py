@@ -92,8 +92,8 @@ Placeholders must be assigned a value when ``run`` is called on the graph::
         print(g.run(sum, feed_dict={'y': 5.0})) # Prints 9.0
         print(g.run(sum, feed_dict={'y': 10.0})) # Prints 14.0
 
-Here, ``feed_dict`` is a dictionary that maps from placeholder node names to the
-value that should be used in the requested computation.  Placeholder nodes
+Here, ``feed_dict`` is a dictionary that maps from placeholder node names to
+the value that should be used in the requested computation.  Placeholder nodes
 are useful for representing inputs and outputs in machine learning training
 algorithms.
 
@@ -115,7 +115,8 @@ those nodes are cached and are available through the ``value`` attribute::
         g.run(sum_sqrd)
 
         print(sum.value) # prints 10.0, sum was computed!
-        print(sum_to_fourth.value) # Something terrible happens, never computed.
+        print(sum_to_fourth.value) # Something terrible happens, never
+        computed.
 
 ============================================
 Node derivatives
@@ -366,6 +367,8 @@ class Node:
                                   self.__class__._COUNT)
             self.__class__._COUNT += 1
 
+        self._value = None
+        self._derivative = None
         self.name = name
         self._value = None
         self._derivative = None
@@ -380,6 +383,7 @@ class Node:
     @property
     def value(self):
         """ Value should be read-only (except for variable nodes). """
+        return self._value
         return self._value
 
     @property
@@ -426,8 +430,8 @@ class UnaryOp(Node):
     """ Abstract base class for all nodes representing unary operators"""
 
     def __init__(self, operand, name):
-        """ UnaryOp constructor handles updating the graph structure and storing
-        the operand.
+        """ UnaryOp constructor handles updating the graph structure and
+        storing the operand.
 
         Args:
             operand: Node representing the operand for this node
@@ -653,7 +657,20 @@ class Abs(UnaryOp):
 
 
 def main():
-    pass
+    with Graph() as g:
+        x = Constant(4.0)
+        y = Placeholder(name='y')
+        sum = Add(x, y)
+
+        print(g.run(sum, feed_dict={'y': 5.0}))  # Prints 9.0
+        print(g.run(sum, feed_dict={'y': 10.0}))  # Prints 14.0
+
+    with Graph() as g:
+        x = Constant(4.0)
+        y = Pow(x, 2.0)  # y = x^2
+
+        print(g.run(y, compute_derivatives=True))  # prints 16.0
+        print(x.derivative)  # prints dy/dx = 2x = 8.0
 
 
 if __name__ == "__main__":
