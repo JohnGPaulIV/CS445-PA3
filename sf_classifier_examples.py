@@ -101,27 +101,19 @@ if __name__ == "__main__":
         ("relu", [10, 10, 10, 10, 10])
     ]
 
-    x, y = noisy_xor(500)
-
     for activation, hidden_sizes in configurations:
-        gradients = []
+        plt.figure()
 
         for run in range(10):
-            classifier = sf_classifiers.MLP(
-                2, hidden_sizes, activation=activation
-            )
+            losses = run_experiment(activation, hidden_sizes)
+            plt.plot(range(len(losses)), losses,
+                     label=f"Run {run + 1}")
 
-            classifier.train(
-                x, y,
-                epochs=1,
-                learning_rate=0.01
-            )
-
-            gradients.append(classifier.first_layer_gradient_mean)
-
-        average = np.mean(gradients)
-
-        print(
-            f"{activation} - {len(hidden_sizes)} layers: "
-            f"{average:.8e}"
-        )
+        plt.title(f"{activation.upper()} - {len(hidden_sizes)} Hidden Layers")
+        plt.xlabel("Epoch")
+        plt.ylabel("Training Loss")
+        plt.xlim(0, 100)
+        plt.ylim(0, 450)
+        plt.legend()
+        plt.savefig(f"{activation}_{len(hidden_sizes)}_layers.png")
+        plt.close()
