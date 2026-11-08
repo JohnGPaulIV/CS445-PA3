@@ -75,16 +75,17 @@ class AbstractSFClassifier(abc.ABC):
                         gradient_count += 1
 
                 for param in self.parameters:
-                    param.assign(param.value - learning_rate * param.derivative)
+                    param.assign(param.value - learning_rate *
+                                 param.derivative)
 
             total_loss = sum(losses)
             loss_history.append(total_loss)
 
             print("Epoch {} loss: {}".format(epoch, total_loss))
         self.first_layer_gradient_mean = (
-        gradient_sum / gradient_count
-        if gradient_count > 0 else None
-    )
+            gradient_sum / gradient_count
+            if gradient_count > 0 else None
+        )
         return loss_history
 
     def score(self, x, y):
@@ -173,7 +174,8 @@ class LogisticRegression(AbstractSFClassifier):
 class MLP(AbstractSFClassifier):
     """ Simple multi-layer neural network classifier."""
 
-    def __init__(self, input_dim, hidden_sizes, activation='sigmoid'):
+    def __init__(self, input_dim, hidden_sizes, num_classes,
+                 activation='sigmoid'):
         """
 
         Args:
@@ -200,13 +202,15 @@ class MLP(AbstractSFClassifier):
                 prev_size = len(prev_layer)
                 cur_layer = []
                 for j in range(hidden_size):
-                    cur_b = sf.Variable(1., name='b_{}_{}'.format(layer + 1, j))
+                    cur_b = sf.Variable(1., name='b_{}_{}'.format(layer +
+                                                                  1, j))
                     self.parameters.append(cur_b)
                     products = [cur_b]
                     for i in range(prev_size):
 
                         if activation == 'sigmoid':
-                            init_w = sf_util.glorot_init(prev_size, hidden_size)
+                            init_w = sf_util.glorot_init(prev_size,
+                                                         hidden_size)
                         else:
                             init_w = sf_util.he_init(prev_size)
 

@@ -10,7 +10,7 @@ version: 3/26/2024
 import math
 import random
 import scalarflow as sf
-import numpy as np
+# import numpy as np
 
 
 def negate(x):
@@ -68,7 +68,19 @@ def multiclass_cross_entropy(y_true, logits):
            Scalarflow node representing cross-entropy loss.
     """
     assert len(y_true) == len(logits)
-    # UNFINISHED
+    soft_maxed = softmax(logits)
+
+    indiv = []
+    for act, n in zip(y_true, soft_maxed):
+        logged = sf.Log(n)
+        one_hot_multi = sf.Multiply(logged, act)
+        indiv.append(one_hot_multi)
+
+    summation = indiv[0]
+    for n in indiv[1:len(indiv)]:
+        summation = sf.Add(summation, n)
+
+    return negate(summation)
 
 
 def softmax(nodes):
@@ -80,8 +92,17 @@ def softmax(nodes):
     Returns:
         A list of scalarflow nodes after softmax has been applied
     """
-    pass
-    # UNFINISHED
+    node_sum = sf.Exp(nodes[0])
+    for n in nodes[1:len(nodes)]:
+        exp = sf.Exp(n)
+        node_sum = sf.Add(node_sum, exp)
+
+    soft_maxed = []
+    for n in nodes:
+        exp = sf.Exp(n)
+        soft_maxed.append(sf.Divide(exp, node_sum))
+
+    return soft_maxed
 
 
 def cum_sum(nodes):
