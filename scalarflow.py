@@ -442,6 +442,7 @@ class UnaryOp(Node):
     def _backwards(self):
         pass
 
+
 class ReLU(UnaryOp):
     _COUNT = 0
 
@@ -456,6 +457,7 @@ class ReLU(UnaryOp):
             self.operand._derivative += self._derivative
 
 # INPUT NODES ------------------------
+
 
 class Variable(Node):
     """ Variable.  A node that can be assigned a value. """
