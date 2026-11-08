@@ -13,6 +13,9 @@ import sklearn.metrics
 import abc
 import random
 
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
 
 class AbstractSFClassifier(abc.ABC):
     """ Abstract base class for simple ScalarFlow-based classifiers. """
@@ -37,6 +40,9 @@ class AbstractSFClassifier(abc.ABC):
                                           feed_dict=feed_dict))
         return np.array(results)
 
+    def feed_dicts(self, x, y):
+        return sf_util.xy_to_feed_dicts(x, y)
+
     def train(self, x, y, learning_rate=.001, epochs=10):
         """Train the classifier using SGD for the specified number of epochs.
 
@@ -52,7 +58,7 @@ class AbstractSFClassifier(abc.ABC):
                           during training.
 
         """
-        feed_dicts = sf_util.xy_to_feed_dicts(x, y)
+        feed_dicts = self.feed_dicts(x, y)
         loss_history = []
         first_layer_weights = [
             p for p in self.parameters
@@ -228,20 +234,115 @@ class MLP(AbstractSFClassifier):
 
             # Create output
             prev_size = len(prev_layer)
-            b = sf.Variable(1., name='b')
-            self.parameters.append(b)
-            products = [b]
-            for i in range(prev_size):
-                cur_w = sf.Variable(sf_util.glorot_init(prev_size, 1),
-                                    name='w_{}'.format(i))
-                self.parameters.append(cur_w)
-                products.append(sf.Multiply(cur_w, prev_layer[i]))
+            logits = []
 
-            self.predict_node = sf_util.logistic(sf_util.cum_sum(products))
+            for k in range(num_classes):
+                b = sf.Variable(1.0, name=f"output_b_{k}")
+                self.parameters.append(b)
+                products = [b]
 
-            y_true = sf.Placeholder(name='y')
-            self.loss_node = sf_util.cross_entropy(y_true, self.predict_node)
+                for i in range(prev_size):
+                    w = sf.Variable(
+                        sf_util.glorot_init(prev_size, num_classes),
+                        name=f"output_w_{i}_{k}"
+                    )
+                    self.parameters.append(w)
+                    products.append(sf.Multiply(w, prev_layer[i]))
+
+                logits.append(sf_util.cum_sum(products))
+
+            self.predict_nodes = sf_util.softmax(logits)
+
+            y_true_nodes = [
+                sf.Placeholder(name=f"y_{k}")
+                for k in range(num_classes)
+            ]
+
+            self.loss_node = sf_util.multiclass_cross_entropy(
+                y_true_nodes, logits
+            )
+
+    def feed_dicts(self, x, y):
+        return sf_util.xy_to_feed_dicts(
+            x, y, prefix_y="y_"
+        )
+
+    def predict(self, x):
+        feed_dicts = sf_util.array_to_feed_dicts(x, "x_")
+        results = []
+
+        for feed_dict in feed_dicts:
+            probabilities = [
+                self.graph.run(node, feed_dict=feed_dict)
+                for node in self.predict_nodes
+            ]
+            results.append(probabilities)
+
+        return np.array(results)
+
+    def score(self, x, y):
+        predicted_classes = np.argmax(self.predict(x), axis=1)
+        actual_classes = np.argmax(y, axis=1)
+
+        accuracy = sklearn.metrics.accuracy_score(
+            actual_classes, predicted_classes
+        )
+
+        print("Accuracy: {:.5f}".format(accuracy))
+        print("Confusion Matrix")
+        print(sklearn.metrics.confusion_matrix(
+            actual_classes, predicted_classes
+        ))
+
+        return accuracy
+
+
+def main():
+    classifier = MLP(
+        input_dim=4,
+        hidden_sizes=[32, 32, 32],
+        num_classes=3,
+        activation="sigmoid"
+    )
+
+    data = np.loadtxt("iris/iris.data", delimiter=",", dtype=str)
+
+    x = data[:, :4].astype(float)
+
+    species = data[:, 4]
+
+    class_ids = {
+        "Iris-setosa": 0,
+        "Iris-versicolor": 1,
+        "Iris-virginica": 2,
+    }
+
+    labels = np.array([class_ids[name] for name in species])
+
+    x_train, x_test, labels_train, labels_test = train_test_split(
+        x,
+        labels,
+        test_size=0.2,
+        random_state=42,
+        stratify=labels,
+    )
+
+    scaler = StandardScaler()
+    x_train = scaler.fit_transform(x_train)
+    x_test = scaler.transform(x_test)
+
+    y_train = np.eye(3)[labels_train]
+    y_test = np.eye(3)[labels_test]
+
+    classifier.train(
+        x_train,
+        y_train,
+        learning_rate=0.03,
+        epochs=200
+    )
+
+    classifier.score(x_test, y_test)
 
 
 if __name__ == "__main__":
-    pass
+    main()
