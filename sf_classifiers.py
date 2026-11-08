@@ -180,7 +180,7 @@ class LogisticRegression(AbstractSFClassifier):
 class MLP(AbstractSFClassifier):
     """ Simple multi-layer neural network classifier."""
 
-    def __init__(self, input_dim, hidden_sizes, num_classes,
+    def __init__(self, input_dim, hidden_sizes, num_classes=None,
                  activation='sigmoid'):
         """
 
@@ -190,8 +190,22 @@ class MLP(AbstractSFClassifier):
                             number of units in the corresponding hidden layer.
                             E.g. [32, 32, 32] would result in an MLP with
                             three hidden layers with 32 units each.
+            num_classes (int or None): None uses original binary output;
+                an integer >= 2 uses multiclass softmax output.
             activation (string): 'sigmoid' or 'relu'
         """
+        # Preserve original positional calls: MLP(2, [10], 'relu').
+        if isinstance(num_classes, str):
+            if activation != 'sigmoid':
+                raise ValueError("Activation specified twice")
+            activation = num_classes
+            num_classes = None
+
+        if num_classes is not None and (
+                not isinstance(num_classes, int) or num_classes < 2):
+            raise ValueError("num_classes must be an integer >= 2")
+
+        self.num_classes = num_classes
         super().__init__()
         if activation not in ('sigmoid', 'relu'):
             raise ValueError("Unrecognized activation " + activation)
@@ -232,8 +246,24 @@ class MLP(AbstractSFClassifier):
 
                 prev_layer = cur_layer
 
-            # Create output
+            # Default: original binary sigmoid output for Part 2.
+            # Explicit num_classes: softmax output for Part 3.
             prev_size = len(prev_layer)
+            if self.num_classes is None:
+                b = sf.Variable(1., name='b')
+                self.parameters.append(b)
+                products = [b]
+                for i in range(prev_size):
+                    w = sf.Variable(sf_util.glorot_init(prev_size, 1),
+                                    name='w_{}'.format(i))
+                    self.parameters.append(w)
+                    products.append(sf.Multiply(w, prev_layer[i]))
+                self.predict_node = sf_util.logistic(sf_util.cum_sum(products))
+                y_true = sf.Placeholder(name='y')
+                self.loss_node = sf_util.cross_entropy(y_true,
+                                                       self.predict_node)
+                return
+
             logits = []
 
             for k in range(num_classes):
@@ -263,11 +293,13 @@ class MLP(AbstractSFClassifier):
             )
 
     def feed_dicts(self, x, y):
-        return sf_util.xy_to_feed_dicts(
-            x, y, prefix_y="y_"
-        )
+        if self.num_classes is None:
+            return super().feed_dicts(x, y)
+        return sf_util.xy_to_feed_dicts(x, y, prefix_y="y_")
 
     def predict(self, x):
+        if self.num_classes is None:
+            return super().predict(x)
         feed_dicts = sf_util.array_to_feed_dicts(x, "x_")
         results = []
 
@@ -281,6 +313,8 @@ class MLP(AbstractSFClassifier):
         return np.array(results)
 
     def score(self, x, y):
+        if self.num_classes is None:
+            return super().score(x, y)
         predicted_classes = np.argmax(self.predict(x), axis=1)
         actual_classes = np.argmax(y, axis=1)
 
